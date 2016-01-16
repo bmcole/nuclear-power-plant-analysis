@@ -1,0 +1,213 @@
+---
+title: "ST 590 HW 1"
+author: "Bryan Cole"
+date: "Due Tuesday, January 19, 2016"
+output: html_document
+---
+
+## Assignment Information
+
+Problem 1: Your task is to find an interesting spatial dataset from the web and 
+
+* use the techniques covered in the lectures to make at least two informative plots of the data 
+
+* identify a research question that could be addressed with the data. 
+
+## The Data
+
+* __Dataset name__: Population Exposure Estimates in Proximity to Nuclear Power Plants, Locations
+
+* __Source__: NASA Socioeconomic Data and Applications Center (SEDAC). Here's the [website](http://sedac.ciesin.columbia.edu/data/set/energy-pop-exposure-nuclear-plants-locations), and here's a direct [link](http://sedac.ciesin.columbia.edu/downloads/data/energy/energy-pop-exposure-nuclear-plants-locations/energy-pop-exposure-nuclear-plants-locations.zip) to download the zipped data, although I believe you must create an account on their website before doing so. 
+
+* __Purpose__: To provide a __global__ dataset of point locations and attributes describing nuclear power plants and reactors.
+
+* __Abstract__: This dataset combines information from a global dataset developed by Declan Butler of Nature News and the Power Reactor Information System (PRIS), an up-to-date database of nuclear reactors maintained by the International Atomic Energy Agency (IAEA). The locations of nuclear reactors around the world are represented as point features associated with reactor specification and performance history attributes as of March 2012.
+
+* __Codebook__: For info on variable names/descriptions and the methodology used to collect the data click [here](http://sedac.ciesin.columbia.edu/downloads/docs/energy/energy-pop-exposure-nuclear-plants-locations-and-country-aggregates.pdf).
+
+#### Reading in the Data
+
+The following code reads in the power plant dataset which is saved in my working directory.
+```{r}
+locations <- read.csv("energy-pop-exposure-nuclear-plants-locations_plants.csv")
+```
+
+There are __`r nrow(locations)`__ rows and __`r ncol(locations)`__ variables (columns) in the dataset. Each row represents a power plant. 
+
+#### load packages used in this analysis:
+```{r,message=FALSE,warning=FALSE}
+library(dplyr)   
+library(fields) 
+library(maps)
+library(ggmap)
+```
+
+## Making the Plots
+
+Since the dataset is global, the first plot I make is global to get an idea of where the nuclear power plants tend to be concentrated.
+```{r}
+# get range of latitudes in the dataset for plotting
+world.lat.lims <- range(locations$Latitude) + c(-3,3)
+
+# get range of longitudes in the dataset for plotting
+world.lon.lims <- range(locations$Longitude) + c(-3,3)
+
+# plot world map with specified lat/lon limits
+map('world',xlim=world.lon.lims,ylim=world.lat.lims)
+title('Global Locations of Nuclear Power Plants')
+points(locations$Longitude, locations$Latitude, cex=0.60, col='red')
+```
+
+It's clear that the majority of nuclear power plants are located in the **Eastern United States**, **Europe**, and **Eastern Asia**.
+For this homework I will reduce the scope of the analyis to the **Eastern United States**, and in the future would be interested in doing a similar analysis for **Europe** and **Japan**. 
+
+#### Reduce data down to the Eastern United States
+
+There are **85** nuclear power plants total in this dataset for the USA, and the following commands narrow that number down to __68__ in the __Eastern__ USA. Lastly, I split this region into two halves (north & south) in order to zoom in more. The split occurs approximately at the northern borders of North Carolina, Tennessee, and Arkansas.
+
+```{r}
+# make factor varialbe character in order to use filter()
+locations$Country <- as.character(locations$Country)
+
+# reduce locations dataset to the Northeastern USA
+east.usa.top <- filter(locations,Country=="UNITED STATES OF AMERICA" & Longitude > -94 & Latitude > 36.5)
+
+# reduce locations dataset to the Southeastern USA
+east.usa.bottom <- filter(locations,Country=="UNITED STATES OF AMERICA" & Longitude > -94 & Latitude < 36.5)
+
+# remove one outlier in Puerto Rico labeled as "Bonus"
+east.usa.bottom$Plant <- as.character(east.usa.bottom$Plant)
+east.usa.bottom <- filter(east.usa.bottom,Plant!="BONUS")
+
+```
+
+
+#### Code for plots of nuclear power plants in the Eastern USA
+
+The size and color of points are dictated by the __amount of the population that is exposed to the particular plant within 30km__ (the smallest radius in the dataset) 
+
+
+### 1990
+```{r,warning=FALSE,message=FALSE,cache=TRUE}
+
+top.lon.lims <- range(east.usa.top$Longitude) + c(-2,2)
+top.lat.lims <- range(east.usa.top$Latitude) + c(-1,1)
+
+# create bounding box for lowerleftlon, lowerleftlat, upperrightlon, upperrightlat
+extent <- c(top.lon.lims[1],top.lat.lims[1],top.lon.lims[2],top.lat.lims[2])
+
+# obtain the map
+mtop <- get_map(extent,source="stamen",maptype="toner")
+
+# plot the raster and add points with lat/lon coordinates
+
+options(scipen=999) # prevent scientific notation in legend
+north1990 <- ggmap(mtop) + 
+    geom_point(aes(x=Longitude,y=Latitude,colour=p90_30,size=p90_30),data=east.usa.top) + 
+    scale_color_gradient(low="yellow",high="red",limits=c(min(east.usa.top$p90_30),max(east.usa.top$p10_30))) + 
+    ggtitle("Northeastern Nuclear Power Plants in 1990 \n Size/Color by # Population Within 30 KM Exposed") +
+    xlab("Longitude") + ylab("Latitude")+
+    guides(colour=guide_colorbar(title="Population")) + 
+    scale_size(guide = guide_legend(direction = "vertical",title="Population"),limits=c(min(east.usa.top$p90_30),max(east.usa.top$p10_30)))
+
+#################################################################
+
+bottom.lon.lims <- range(east.usa.bottom$Longitude) + c(-2,2)
+bottom.lat.lims <- range(east.usa.bottom$Latitude) + c(-1,1)
+
+# create bounding box for lowerleftlon, lowerleftlat, upperrightlon, upperrightlat
+extent2 <- c(bottom.lon.lims[1],bottom.lat.lims[1],bottom.lon.lims[2],bottom.lat.lims[2])
+
+# obtain the map
+mbot <- get_map(extent2,source="stamen",maptype="toner")
+
+# plot the raster and add points with lat/lon coordinates
+options(scipen=999)
+south1990 <- ggmap(mbot) + 
+    geom_point(aes(x=Longitude,y=Latitude,colour=p90_30,size=p90_30),data=east.usa.bottom) + 
+    scale_color_gradient(low="yellow",high="red",limits=c(min(east.usa.bottom$p90_30),max(east.usa.bottom$p10_30))) + 
+    ggtitle("Southeastern Nuclear Power Plants in 1990 \n Size/Color by # Population Within 30 KM Exposed") + 
+    xlab("Longitude") + 
+    ylab("Latitude") + 
+    guides(colour=guide_colorbar(title="Population")) + 
+    scale_size(guide = guide_legend(direction = "vertical",title="Population"),limits=c(min(east.usa.bottom$p90_30),max(east.usa.bottom$p10_30)))
+
+```
+
+
+### 2000
+```{r,warning=FALSE,message=FALSE,cache=TRUE}
+
+# plot the raster and add points with lat/lon coordinates
+north2000 <- ggmap(mtop) + 
+    geom_point(aes(x=Longitude,y=Latitude,colour=p00_30,size=p00_30),data=east.usa.top) + 
+    scale_color_gradient(low="yellow",high="red",limits=c(min(east.usa.top$p90_30),max(east.usa.top$p10_30))) + 
+    ggtitle("Northeastern Nuclear Power Plants in 2000 \n Size/Color by # Population Within 30 KM Exposed") +
+    xlab("Longitude") + ylab("Latitude")+
+    guides(colour=guide_colorbar(title="Population")) + 
+    scale_size(guide = guide_legend(direction = "vertical",title="Population"))
+
+#################################################################
+
+# plot the raster and add points with lat/lon coordinates
+south2000 <- ggmap(mbot) + 
+    geom_point(aes(x=Longitude,y=Latitude,colour=p00_30,size=p00_30),data=east.usa.bottom) + 
+    scale_color_gradient(low="yellow",high="red",limits=c(min(east.usa.bottom$p90_30),max(east.usa.bottom$p10_30))) + 
+    ggtitle("Southeastern Nuclear Power Plants in 2000 \n Size/Color by # Population Within 30 KM Exposed") + 
+    xlab("Longitude") + 
+    ylab("Latitude") + 
+    guides(colour=guide_colorbar(title="Population")) + 
+    scale_size(guide = guide_legend(direction = "vertical",title="Population"))
+
+
+```
+
+### 2010
+
+```{r,warning=FALSE,message=FALSE,cache=TRUE}
+
+# plot the raster and add points with lat/lon coordinates
+north2010 <- ggmap(mtop) + 
+    geom_point(aes(x=Longitude,y=Latitude,colour=p10_30,size=p10_30),data=east.usa.top) + 
+    scale_color_gradient(low="yellow",high="red",limits=c(min(east.usa.top$p90_30),max(east.usa.top$p10_30))) + 
+    ggtitle("Northeastern Nuclear Power Plants in 2010 \n Size/Color by # Population Within 30 KM Exposed") +
+    xlab("Longitude") + ylab("Latitude")+
+    guides(colour=guide_colorbar(title="Population")) + 
+    scale_size(guide = guide_legend(direction = "vertical",title="Population"))
+
+#################################################################
+
+
+# plot the raster and add points with lat/lon coordinates
+south2010 <- ggmap(mbot) + 
+    geom_point(aes(x=Longitude,y=Latitude,colour=p10_30,size=p10_30),data=east.usa.bottom) + 
+    scale_color_gradient(low="yellow",high="red",limits=c(min(east.usa.bottom$p90_30),max(east.usa.bottom$p10_30))) + 
+    ggtitle("Southeastern Nuclear Power Plants in 2010 \n Size/Color by # Population Within 30 KM Exposed") + 
+    xlab("Longitude") + 
+    ylab("Latitude") + 
+    guides(colour=guide_colorbar(title="Population")) + 
+    scale_size(guide = guide_legend(direction = "vertical",title="Population"))
+
+```
+
+
+### Arrange Plots by Decade and Region
+```{r}
+north1990
+north2000
+north2010
+south1990
+south2000
+south2010
+```
+
+# Research Question the Data Can Answer
+
+This data can be used to answer several research questions, but for the sake of this assignment here's just a few:
+
+* In what locations of the United States is the population exposed to nuclear power plants the highest?
+
+* How have population exposures to nuclear power plants in the United States changed between 1990, 2000, and 2010?
+
+* How does the United States' population exposures compare to Europe's and Asia's?
+
